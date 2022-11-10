@@ -1,4 +1,6 @@
 #include <Adafruit_NeoPixel.h>
+#include<Wire.h>
+#include <MPU6050_light.h>
 
 #define ul unsigned long 
 #define BUTTON_PIN 6
@@ -9,10 +11,12 @@
 const int lightsEdge = 9;
 const int lightsMid = 18;
 const int lightsTot = 4 * lightsEdge + lightsMid;
+const int MPU_addr=0x68;  // I2C address of the MPU-6050
 
 // Thread Constants
 const ul lightTimer = 10;
 const ul buttonTimer = 50;
+const ul accelTimer = 100;
 
 // LED Object
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(lightsTot, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -23,6 +27,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(lightsTot, LED_PIN, NEO_GRB + NEO_KH
 // Thread Variables
 ul prevLightTime = 0;
 ul prevButtonTime = 0;
+ul prevAccelTime = 0;
 
 // Light Variables
 int lightState = 0;
@@ -35,16 +40,31 @@ int buttonInput = 0;
 int pressed = 0;
 int signal = 1;
 
+//Accelerometer Variables
+MPU6050 mpu(Wire);
+
 void setup() {
 
   // Button
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  
+
+
 
   // LED Strip
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
   strip.setBrightness(100);
+
+  //Accelerometer
+  Wire.begin();
+  byte status = mpu.begin();
+  Serial.print(F("MPU6050 status: "));
+  Serial.println(status);
+  while (status != 0) { } // stop everything if could not connect to MPU6050
+  Serial.println(F("Calculating offsets, do not move MPU6050"));
+  delay(1000);
+  mpu.calcOffsets(); // gyro and accelero
+  Serial.println("Done!\n");
 
   Serial.begin(9600);
 }
@@ -219,8 +239,19 @@ void readButton(){
 
 }
 
+void checkBraking(){
+  float pitch = (mpu.getAngleY()*71)/4068; //gets the pitch and converts to radians
+  if((mpu.getAccX()+sin(pitch))/cos(pitch)<-0.5){
+    signal = signal ^ 1;
+    lightState = 0;
+    lightCnt = 0;
+    colorWipe();
+  }
+  
+}
+
 void runThread(){
-    // Signalling Thread
+    // LED Thread
     ul curLightTime = millis();
     if (curLightTime - prevLightTime > lightTimer){
       prevLightTime = curLightTime;
@@ -236,6 +267,13 @@ void runThread(){
       readButton();
     }
 
+    // Accelerometer Thread
+    mpu.update(); //update accelerometer values constantly for better accuracy
+    ul curAccelTime = millis();
+    if (curAccelTime - prevAccelTime > accelTimer){
+      prevAccelTime = curAccelTime;
+      checkBraking();
+    }
   // Serial.print("r ");
   // Serial.print(buttonInput);
   // Serial.print(" p ");
