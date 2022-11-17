@@ -32,7 +32,8 @@ ul prevAccelTime = 0;
 // Light Variables
 int lightState = 0;
 int lightCnt = 0;
-uint32_t brakeColour = strip.Color(255, 0, 0);
+uint32_t brakeColour = strip.Color(0, 255, 0);
+uint32_t turnColour = strip.Color(255, 0, 0);
 uint32_t blank = strip.Color(0, 0, 0);
 
 // Button Variables
@@ -41,14 +42,14 @@ int pressed = 0;
 int signal = 1;
 
 //Accelerometer Variables
+int brakeState = 0;
 MPU6050 mpu(Wire);
+int count =0;
 
 void setup() {
 
   // Button
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-
-
 
   // LED Strip
   strip.begin();
@@ -91,7 +92,7 @@ void signalLeft(){
     // Serial.print("State 0 LightCnt ");
     // Serial.println(lightCnt);
 
-    strip.setPixelColor(lightsMid - 1 - lightCnt, brakeColour); // Sets current light to brakeColour, note middle strip starts at index 0
+    strip.setPixelColor(lightsMid - 1 - lightCnt, turnColour); // Sets current light to brakeColour, note middle strip starts at index 0
     strip.show();
     lightCnt++;
     // At the halfway point, we switch states
@@ -103,9 +104,9 @@ void signalLeft(){
 
 
   if (lightState == 1){
-    strip.setPixelColor(lightsTot - lightsEdge - 1 - lightCnt, brakeColour); 
-    strip.setPixelColor(lightsMid + lightsEdge + lightCnt, brakeColour);
-    strip.setPixelColor(lightsMid/2 - 1 - lightCnt, brakeColour);
+    strip.setPixelColor(lightsTot - lightsEdge - 1 - lightCnt, turnColour); 
+    strip.setPixelColor(lightsMid + lightsEdge + lightCnt, turnColour);
+    strip.setPixelColor(lightsMid/2 - 1 - lightCnt, turnColour);
     strip.show();
     lightCnt++;
 
@@ -159,7 +160,7 @@ void signalRight(){
     // Serial.print("State 0 LightCnt ");
     // Serial.println(lightCnt);
 
-    strip.setPixelColor(lightCnt, brakeColour); // Sets current light to brakeColour, note middle strip starts at index 0
+    strip.setPixelColor(lightCnt, turnColour); // Sets current light to turnColour, note middle strip starts at index 0
     strip.show();
     lightCnt++;
     // At the halfway point, we switch states
@@ -171,9 +172,9 @@ void signalRight(){
 
 
   if (lightState == 1){
-    strip.setPixelColor(lightsTot - lightsEdge + lightCnt, brakeColour); 
-    strip.setPixelColor(lightsMid + lightsEdge - 1 - lightCnt, brakeColour);
-    strip.setPixelColor(lightsMid/2 + lightCnt, brakeColour);
+    strip.setPixelColor(lightsTot - lightsEdge + lightCnt, turnColour); 
+    strip.setPixelColor(lightsMid + lightsEdge - 1 - lightCnt, turnColour);
+    strip.setPixelColor(lightsMid/2 + lightCnt, turnColour);
     strip.show();
     lightCnt++;
 
@@ -213,6 +214,16 @@ void signalRight(){
 
 }
 
+// SignalBreak State Animation
+void signalBrake(){
+  if (brakeState == 0){
+    for (int i = 0; i < lightsMid; i++){
+      strip.setPixelColor(i, brakeColour);
+    }
+    strip.show();
+  }
+}
+
 void readButton(){
   /*buttonInput
   0 is not pressed
@@ -222,7 +233,12 @@ void readButton(){
   buttonInput = digitalRead(BUTTON_PIN) ^ 1;
 
   if (buttonInput == 1 && pressed == 0){
-    signal = signal ^ 1; // reverses signal from 0 to 1 and vice versa
+    if (signal == 3){
+      signal = 0;
+    }
+    else{
+      signal = (signal + 1) % 3; // reverses signal from 0 to 1 and vice versa
+    }
 
     //Reset variables
     lightState = 0;
@@ -241,10 +257,27 @@ void readButton(){
 
 void checkBraking(){
   float pitch = (mpu.getAngleY()*71)/4068; //gets the pitch and converts to radians
+  
+
   if((mpu.getAccX()+sin(pitch))/cos(pitch)<-0.5){
-    signal = signal ^ 1;
+    signal = 3;
     lightState = 0;
     lightCnt = 0;
+    count=0;
+    colorWipe();
+  }
+  else if((mpu.getAccX()+sin(pitch))/cos(pitch)>-0.1){
+    count++;
+  }
+
+  if (signal != 3){
+    count = 0;
+  }
+  if (count>10){
+    signal = 0;
+    lightState = 0;
+    lightCnt = 0;
+    count=0;
     colorWipe();
   }
   
@@ -255,9 +288,17 @@ void runThread(){
     ul curLightTime = millis();
     if (curLightTime - prevLightTime > lightTimer){
       prevLightTime = curLightTime;
-      // Later on handle signals
-      if (signal) signalLeft();
-      else signalRight();
+
+      //Signal == 0 is the neutral state
+      if (signal == 1){
+        signalLeft();
+      }
+      else if (signal == 2){
+        signalRight();
+      }
+      else if (signal == 3){
+        signalBrake();
+      }
     }
 
     // Button Thread
@@ -278,8 +319,8 @@ void runThread(){
   // Serial.print(buttonInput);
   // Serial.print(" p ");
   // Serial.print(pressed);
-  // Serial.print(" s ");
-  // Serial.println(signal);
+  Serial.print(" s ");
+  Serial.println(signal);
 }
 
 void loop() {
