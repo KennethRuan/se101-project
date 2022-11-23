@@ -45,6 +45,7 @@ int signal = 1;
 int brakeState = 0;
 MPU6050 mpu(Wire);
 int count =0;
+float previousHeading = 0;
 
 void setup() {
 
@@ -240,6 +241,10 @@ void readButton(){
       signal = (signal + 1) % 3; // reverses signal from 0 to 1 and vice versa
     }
 
+  //if the left or right turn signal is activated, record the heading of the accelerometer
+  if (signal==1 || signal==2){
+    previousHeading= mpu.getAngleZ(); 
+  }
     //Reset variables
     lightState = 0;
     lightCnt = 0;
@@ -257,16 +262,17 @@ void readButton(){
 
 void checkBraking(){
   float pitch = (mpu.getAngleY()*71)/4068; //gets the pitch and converts to radians
-  
+  //Serial.print("pitch: ");
+  //Serial.print(pitch);
 
-  if((mpu.getAccX()+sin(pitch))/cos(pitch)<-0.5){
+  if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)<-0.5){
     signal = 3;
     lightState = 0;
     lightCnt = 0;
     count=0;
     colorWipe();
   }
-  else if((mpu.getAccX()+sin(pitch))/cos(pitch)>-0.1){
+  else if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)>-0.1){
     count++;
   }
 
@@ -281,6 +287,30 @@ void checkBraking(){
     colorWipe();
   }
   
+}
+
+void checkTurned(){
+  float heading =mpu.getAngleZ();
+  //Serial.print("Heading: ");
+  //Serial.println(heading);
+
+  //checks if the current heading differs from the recorded heading by more than 45, if so deactivate turn signal
+  if (signal==1){
+    if (heading - previousHeading>45){
+      signal = 0;
+      lightState = 0;
+      lightCnt = 0;
+      colorWipe();      
+    }
+  }
+  else if (signal ==2){
+    if (heading -previousHeading<-45){
+      signal = 0;
+      lightState = 0;
+      lightCnt = 0;
+      colorWipe();   
+    }
+  }
 }
 
 void runThread(){
@@ -310,17 +340,22 @@ void runThread(){
 
     // Accelerometer Thread
     mpu.update(); //update accelerometer values constantly for better accuracy
+    //Serial.print("AccelX: ");
+    //Serial.println(mpu.getAccX()*cos((mpu.getAngleY()*71)/4068)+mpu.getAccZ()*sin((mpu.getAngleY()*71)/4068));
+
     ul curAccelTime = millis();
     if (curAccelTime - prevAccelTime > accelTimer){
       prevAccelTime = curAccelTime;
-      checkBraking();
+      //checkBraking();
+      checkTurned();
     }
   // Serial.print("r ");
   // Serial.print(buttonInput);
   // Serial.print(" p ");
   // Serial.print(pressed);
-  Serial.print(" s ");
-  Serial.println(signal);
+  //Serial.print(" s ");
+  //Serial.println(signal);
+  
 }
 
 void loop() {
