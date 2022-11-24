@@ -4,23 +4,26 @@
 
 #define ul unsigned long 
 #define BUTTON_PIN 6
-#define LED_PIN 7
+#define SIGNAL_PIN 7
+#define BRAKE_PIN 3
 
 // CONSTANTS
 
 const int lightsEdge = 9;
 const int lightsMid = 18;
 const int lightsTot = 4 * lightsEdge + lightsMid;
+const int brakeLightsTot = 3 * 9;
+
 const int MPU_addr=0x68;  // I2C address of the MPU-6050
 
 // Thread Constants
-const ul lightTimer = 10;
+const ul lightTimer = 20;
 const ul buttonTimer = 50;
-const ul accelTimer = 100;
+const ul accelTimer = 20;
 
 // LED Object
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(lightsTot, LED_PIN, NEO_GRB + NEO_KHZ800);
-
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(lightsTot, SIGNAL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel brake = Adafruit_NeoPixel(brakeLightsTot, BRAKE_PIN, NEO_GRB + NEO_KHZ800);
 
 // VARIABLES
 
@@ -32,8 +35,8 @@ ul prevAccelTime = 0;
 // Light Variables
 int lightState = 0;
 int lightCnt = 0;
-uint32_t brakeColour = strip.Color(0, 255, 0);
-uint32_t turnColour = strip.Color(255, 0, 0);
+uint32_t brakeColour = strip.Color(255, 0, 0);
+uint32_t turnColour = strip.Color(236, 150, 0);
 uint32_t blank = strip.Color(0, 0, 0);
 
 // Button Variables
@@ -57,6 +60,10 @@ void setup() {
   strip.show(); // Initialize all pixels to 'off'
   strip.setBrightness(100);
 
+  brake.begin();
+  brake.show();
+  brake.setBrightness(100);
+
   //Accelerometer
   Wire.begin();
   byte status = mpu.begin();
@@ -71,11 +78,19 @@ void setup() {
   Serial.begin(9600);
 }
 
-// Helper function to clear the LEDs
-void colorWipe() {
+// Helper function to clear the signal LEDs
+void signalWipe() {
   for(uint16_t i=0; i<strip.numPixels();i++) {
       strip.setPixelColor(i, blank);
       strip.show();
+  }
+}
+
+// Helper function to clear the signal LEDs
+void brakeWipe() {
+  for(uint16_t i=0; i<brake.numPixels();i++) {
+      brake.setPixelColor(i, blank);
+      brake.show();
   }
 }
 
@@ -217,11 +232,11 @@ void signalRight(){
 
 // SignalBreak State Animation
 void signalBrake(){
-  if (brakeState == 0){
-    for (int i = 0; i < lightsMid; i++){
-      strip.setPixelColor(i, brakeColour);
+  if (brakeState == 1){
+    for (int i = 0; i < brakeLightsTot; i++){
+      brake.setPixelColor(i, brakeColour);
     }
-    strip.show();
+    brake.show();
   }
 }
 
@@ -234,21 +249,16 @@ void readButton(){
   buttonInput = digitalRead(BUTTON_PIN) ^ 1;
 
   if (buttonInput == 1 && pressed == 0){
-    if (signal == 3){
-      signal = 0;
-    }
-    else{
-      signal = (signal + 1) % 3; // reverses signal from 0 to 1 and vice versa
-    }
+    signal = (signal + 1) % 3; // reverses signal from 0 to 1 and vice versa
 
   //if the left or right turn signal is activated, record the heading of the accelerometer
-  if (signal==1 || signal==2){
-    previousHeading= mpu.getAngleZ(); 
-  }
+    if (signal==1 || signal==2){
+      previousHeading= mpu.getAngleZ(); 
+    }
     //Reset variables
     lightState = 0;
     lightCnt = 0;
-    colorWipe();
+    signalWipe();
 
     pressed = 1;
   }
@@ -265,26 +275,22 @@ void checkBraking(){
   //Serial.print("pitch: ");
   //Serial.print(pitch);
 
-  if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)<-0.5){
-    signal = 3;
-    lightState = 0;
-    lightCnt = 0;
+  if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)<-0.3){
+    // Serial.println("braking");
+    brakeState = 1;
     count=0;
-    colorWipe();
   }
-  else if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)>-0.1){
+  else if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)>-0.05){
     count++;
   }
 
-  if (signal != 3){
+  if (brakeState != 1){
     count = 0;
   }
-  if (count>10){
-    signal = 0;
-    lightState = 0;
-    lightCnt = 0;
+  if (count>40){
+    brakeState = 0;
     count=0;
-    colorWipe();
+    brakeWipe();
   }
   
 }
@@ -300,7 +306,7 @@ void checkTurned(){
       signal = 0;
       lightState = 0;
       lightCnt = 0;
-      colorWipe();      
+      signalWipe();      
     }
   }
   else if (signal ==2){
@@ -308,7 +314,7 @@ void checkTurned(){
       signal = 0;
       lightState = 0;
       lightCnt = 0;
-      colorWipe();   
+      signalWipe();   
     }
   }
 }
@@ -326,7 +332,9 @@ void runThread(){
       else if (signal == 2){
         signalRight();
       }
-      else if (signal == 3){
+      
+      // Signal Brake
+      if (brakeState == 1){
         signalBrake();
       }
     }
@@ -346,7 +354,7 @@ void runThread(){
     ul curAccelTime = millis();
     if (curAccelTime - prevAccelTime > accelTimer){
       prevAccelTime = curAccelTime;
-      //checkBraking();
+      checkBraking();
       checkTurned();
     }
   // Serial.print("r ");
