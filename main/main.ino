@@ -3,7 +3,8 @@
 #include <MPU6050_light.h>
 
 #define ul unsigned long 
-#define BUTTON_PIN 6
+#define LBUTTON_PIN 5
+#define RBUTTON_PIN 6
 #define SIGNAL_PIN 7
 #define BRAKE_PIN 3
 
@@ -40,9 +41,11 @@ uint32_t turnColour = strip.Color(236, 150, 0);
 uint32_t blank = strip.Color(0, 0, 0);
 
 // Button Variables
-int buttonInput = 0;
-int pressed = 0;
-int signal = 1;
+int lButtonInput = 0;
+int rButtonInput = 0;
+int lPressed = 0;
+int rPressed = 0;
+int signal = 0;
 
 //Accelerometer Variables
 int brakeState = 0;
@@ -53,16 +56,21 @@ float previousHeading = 0;
 void setup() {
 
   // Button
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LBUTTON_PIN, INPUT_PULLUP);
+  pinMode(RBUTTON_PIN, INPUT_PULLUP);
 
   // LED Strip
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
   strip.setBrightness(100);
 
+  signalWipe();
+
   brake.begin();
   brake.show();
   brake.setBrightness(100);
+
+  brakeWipe();
 
   //Accelerometer
   Wire.begin();
@@ -246,41 +254,74 @@ void readButton(){
   1 is pressed
   */
 
-  buttonInput = digitalRead(BUTTON_PIN) ^ 1;
+  lButtonInput = digitalRead(LBUTTON_PIN) ^ 1;
+  rButtonInput = digitalRead(RBUTTON_PIN) ^ 1;
 
-  if (buttonInput == 1 && pressed == 0){
-    signal = (signal + 1) % 3; // reverses signal from 0 to 1 and vice versa
+  if (lButtonInput == 1 && lPressed == 0){
+    lPressed = 1;
+
+    if (signal == 1){
+      signal = 0; // Turns off signal
+    }
+    else{
+      signal = 1;
+    }
 
   //if the left or right turn signal is activated, record the heading of the accelerometer
     if (signal==1 || signal==2){
-      previousHeading= mpu.getAngleZ(); 
+      previousHeading = mpu.getAngleZ(); 
     }
-    //Reset variables
+
+  //Reset variables
     lightState = 0;
     lightCnt = 0;
     signalWipe();
 
-    pressed = 1;
   }
 
-  if (buttonInput == 0){
-    pressed = 0;
+  if (rButtonInput == 1 && rPressed == 0){
+    rPressed = 1;
+
+    if (signal == 2){
+      signal = 0; // Turns off signal
+    }
+    else{
+      signal = 2;
+    }
+
+  //if the left or right turn signal is activated, record the heading of the accelerometer
+    if (signal==1 || signal==2){
+      previousHeading = mpu.getAngleZ(); 
+    }
+
+  //Reset variables
+    lightState = 0;
+    lightCnt = 0;
+    signalWipe();
+
   }
 
 
+  if (lButtonInput == 0){
+    lPressed = 0;
+  }
+
+  if (rButtonInput == 0){
+    rPressed = 0;
+  }
 }
 
 void checkBraking(){
   float pitch = (mpu.getAngleY()*71)/4068; //gets the pitch and converts to radians
-  //Serial.print("pitch: ");
-  //Serial.print(pitch);
+  Serial.print("tings: ");
+  Serial.println(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch));
 
-  if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)<-0.3){
+  if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)>0.15){
     // Serial.println("braking");
     brakeState = 1;
     count=0;
   }
-  else if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)>-0.05){
+  else if(mpu.getAccX()*cos(pitch)+mpu.getAccZ()*sin(pitch)<0.05){
     count++;
   }
 
@@ -309,8 +350,8 @@ void checkTurned(){
       signalWipe();      
     }
   }
-  else if (signal ==2){
-    if (heading -previousHeading<-45){
+  else if (signal == 2){
+    if (heading - previousHeading<-45){
       signal = 0;
       lightState = 0;
       lightCnt = 0;
@@ -348,8 +389,8 @@ void runThread(){
 
     // Accelerometer Thread
     mpu.update(); //update accelerometer values constantly for better accuracy
-    //Serial.print("AccelX: ");
-    //Serial.println(mpu.getAccX()*cos((mpu.getAngleY()*71)/4068)+mpu.getAccZ()*sin((mpu.getAngleY()*71)/4068));
+    // Serial.print("AccelX: ");
+    // Serial.println(mpu.getAccX()*cos((mpu.getAngleY()*71)/4068)+mpu.getAccZ()*sin((mpu.getAngleY()*71)/4068));
 
     ul curAccelTime = millis();
     if (curAccelTime - prevAccelTime > accelTimer){
@@ -358,7 +399,7 @@ void runThread(){
       checkTurned();
     }
   // Serial.print("r ");
-  // Serial.print(buttonInput);
+  // Serial.print(rButtonInput);
   // Serial.print(" p ");
   // Serial.print(pressed);
   //Serial.print(" s ");
