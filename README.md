@@ -1,4 +1,4 @@
-#The SignalVest™️
+# The SignalVest™️
 
 **Introduction**
 
