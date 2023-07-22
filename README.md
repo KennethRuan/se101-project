@@ -1,10 +1,10 @@
 # The SignalVest™️
 
-**Introduction**
+### Introduction
 
 The premise of this project was to mimic the signaling system of a vehicle and thereby allow bikers to convey their intentions to other vehicles on the road. In 2020 alone, over 130 000 bicyclists were injured in road accidents. With our project, we aimed to reduce road-side miscommunication by providing a more reliable method of communication in all lighting conditions. There are two main features on the vest that we have achieved, namely, turn signaling and brake signaling. The turn signal turns on at the push of a button and automatically shut off after completing the turn. Similarly, the brake signal automatically turns on when the vest detects deceleration and turns off when it does not.  
 
-**Technical Details** 
+### Technical Details 
 
 The Signal Vest offers several features including turn signaling, automatic brake lights and automatic turn light cancellation. To implement the features, the project makes use of an Arduino microcontroller working in conjunction with LEDs, an accelerometer (the MPU-6050), and push buttons. 
 
